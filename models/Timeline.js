@@ -8,4 +8,4 @@ const timelineSchema = new mongoose.Schema({
   role: String,
 }, { timestamps: true });
 
-export default mongoose.model("Timeline", timelineSchema);
+export default mongoose.model("TimeLine", timelineSchema);
