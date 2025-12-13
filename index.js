@@ -9,19 +9,33 @@ import authRoutes from "./routes/authRoutes.js";
 import issueRoutes from "./routes/issueRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
-
+import { admin } from "./config/admin.js";
+import staffRoutes from "./routes/staffRoutes.js";
 dotenv.config();
 const app = express();
 
+
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "http://localhost:5174"],  // frontend URL
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+app.use(express.json())
+
 // database connect
 connectDB();
+admin();
 
 app.get("/", (req, res) => {
-  res.send("PIIRS Server Running...");
+  res.send(" Server Running...");
 });
 
 app.use("/api/auth", authRoutes);
 app.use("/api/issues", issueRoutes);
+app.use("/api/staff", staffRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/payments", paymentRoutes);
 

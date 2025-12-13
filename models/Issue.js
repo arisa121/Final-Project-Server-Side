@@ -1,25 +1,43 @@
 import mongoose from "mongoose";
 
-const issueSchema = new mongoose.Schema({
-  title: String,
-  description: String,
-  category: String,
-  image: String,
-  location: String,
-
-  status: {
-    type: String,
-    enum: ["pending", "in-progress", "working", "resolved", "closed"],
-    default: "pending"
+const issueSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    category: {
+      type: String,
+      enum: ["Road", "Garbage", "Water", "Electricity"],
+      required: true,
+    },
+    images: [String],
+    location: {
+      address: String,
+      lat: Number,
+      lng: Number,
+    },
+    status: {
+      type: String,
+      enum: ["pending", "in-progress","working", "resolved", "closed","rejected"],
+      default: "pending",
+    },
+    priority: {
+      type: String,
+      enum: ["normal", "high"],
+      default: "normal",
+    },
+    upvotes: { type: Number, default: 0 },
+    upvotedBy: [{ type: String }], // Store user IDs or emails
+    reporter: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    assignedStaff: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    isBoosted: { type: Boolean, default: false },
   },
-
-  priority: { type: String, enum: ["normal", "high"], default: "normal" },
-
-  reporter: { type: mongoose.Schema.ObjectId, ref: "User" },
-  assignedTo: { type: mongoose.Schema.ObjectId, ref: "User" },
-
-  upvotes: [{ type: mongoose.Schema.ObjectId, ref: "User" }]
-
-}, { timestamps: true });
-
+  { timestamps: true }
+);
 export default mongoose.model("Issue", issueSchema);

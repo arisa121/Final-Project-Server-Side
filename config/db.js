@@ -14,6 +14,7 @@ export default connectDB;
 
 
 // const { MongoClient, ServerApiVersion } = require('mongodb');
+
 // const uri = "mongodb+srv://final - project:IzLjcgBmIproKig9@simple.pvo9bwi.mongodb.net/?appName=Simple";
 
 // // Create a MongoClient with a MongoClientOptions object to set the Stable API version
