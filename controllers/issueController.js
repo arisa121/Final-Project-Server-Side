@@ -52,7 +52,7 @@ export const getAllIssues = async (req, res) => {
     const issues = await Issue.find(query)
       .populate("reporter", "name email photo")
       .populate("assignedStaff", "name email photo")
-      .sort({ priority: -1, createdAt: -1 }) // High priority (boosted) first
+      .sort({ priority: -1, createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
 
@@ -144,7 +144,6 @@ export const getIssueById = async (req, res) => {
 export const createIssue = async (req, res) => {
   try {
     const user = req.user;
-
     // Check if user is blocked
     if (user.isBlocked) {
       return res.status(403).json({ message: "Blocked users cannot report issues" });
@@ -158,7 +157,7 @@ export const createIssue = async (req, res) => {
       });
     }
 
-    const { title, description, category, image, location } = req.body;
+    const { title, description, category, image, address} = req.body;
 
     // Create issue
     const issue = await Issue.create({
@@ -166,9 +165,9 @@ export const createIssue = async (req, res) => {
       description,
       category,
       images: image ? [image] : [],
-      location, // { address, lat, lng } or string
+      location: address || "Location not provided",
       reporter: req.user._id,
-      priority: "normal", // Default priority
+      priority: "normal",
       upvotes: 0,
       upvotedBy: [],
     });
@@ -226,7 +225,7 @@ export const getUserIssues = async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit);
 
     const issues = await Issue.find(query)
-      .sort({ priority: -1, createdAt: -1 }) // Boosted first, then newest
+      .sort({ priority: -1, createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
 
@@ -343,6 +342,20 @@ export const boostIssue = async (req, res) => {
     res.json({ message: "Issue boosted successfully", issue });
   } catch (err) {
     console.error("boostIssue error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+// Get Latest Resolved Issues
+export const getLatestResolvedIssues = async (req, res) => {
+  try {
+    const issues = await Issue.find({ status: "resolved" })
+      .populate("reporter", "name email photo")
+      .sort({ updatedAt: -1 })
+      .limit(6);
+
+    res.json(issues);
+  } catch (err) {
+    console.error("getLatestResolvedIssues error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

@@ -4,7 +4,7 @@ const paymentSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.ObjectId, ref: "User" },
   issue: { type: mongoose.Schema.ObjectId, ref: "Issue" },
   amount: Number,
-  type: String, // "premium" or "boost"
+  type: String,
   txnId: String,
 }, { timestamps: true });
 

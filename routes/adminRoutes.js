@@ -1,6 +1,5 @@
 import express from "express";
-import { auth } from "../middleware/auth.js";
-import { allowRoles } from "../middleware/role.js";
+import { auth, requireRole } from "../middleware/auth.js";
 import {
   getAdminStats,
   getAllIssuesAdmin,
@@ -18,27 +17,29 @@ import {
 
 const router = express.Router();
 
-// Dashboard Stats
-router.get("/stats", auth, allowRoles("admin"), getAdminStats);
+//All routes require authentication + admin role
+router.use(auth, requireRole("admin"));
+
+// Dashboard
+router.get("/stats", getAdminStats);
 
 // Issues Management
-router.get("/issues", auth, allowRoles("admin"), getAllIssuesAdmin);
-router.patch("/issues/:id/assign", auth, allowRoles("admin"), assignStaff);
-router.patch("/issues/:id/reject", auth, allowRoles("admin"), rejectIssue);
+router.get("/issues", getAllIssuesAdmin);
+router.patch("/issues/:id/assign", assignStaff);
+router.patch("/issues/:id/reject", rejectIssue);
 
 // Staff Management
-router.get("/staff", auth, allowRoles("admin"), getAllStaff);
-router.post("/staff", auth, allowRoles("admin"), createStaff);
-router.put("/staff/:id", auth, allowRoles("admin"), updateStaff);
-router.delete("/staff/:id", auth, allowRoles("admin"), deleteStaff);
+router.get("/staff", getAllStaff);
+router.post("/staff", createStaff);
+router.put("/staff/:id", updateStaff);
+router.delete("/staff/:id", deleteStaff);
 
-// User Management
-router.get("/users", auth, allowRoles("admin"), getAllUsers);
-router.patch("/users/:id/block", auth, allowRoles("admin"), blockUser);
+// Users Management
+router.get("/users", getAllUsers);
+router.patch("/users/:id/block", blockUser);
 
 // Payments
-router.get("/payments", auth, allowRoles("admin"), getAllPayments);
-router.get("/payments/stats", auth, allowRoles("admin"), getPaymentStats);
+router.get("/payments", getAllPayments);
+router.get("/payments/stats", getPaymentStats);
 
 export default router;
-

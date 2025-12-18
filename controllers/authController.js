@@ -1,137 +1,226 @@
-import jwt from "jsonwebtoken";
+import { firebaseAuth } from "../config/firebaseAdmin.js";
 import User from "../models/User.js";
 
+// Get current user (protected route)
 export const getCurrentUser = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select("-password");
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-    res.json(user);
+    res.json(req.user);
   } catch (err) {
     console.error("Get current user error:", err);
     res.status(500).json({ message: err.message });
   }
 };
 
-export const generateToken = async (req, res) => {
+//Register / Login with Firebase
+export const registerOrLogin = async (req, res) => {
   try {
-    const { email,name,photo } = req.body;
-    let user = await User.findOne({ email });
+    const { firebaseUid, name, email, photo,password } = req.body;
+
+    if (!firebaseUid || !email) {
+      return res.status(400).json({
+        message: "Firebase UID and email are required",
+      });
+    }
+
+    // Find user by firebaseUid
+    let user = await User.findOne({ firebaseUid });
+
     if (!user) {
+      // Check if email exists with different firebaseUid
+      const emailUser = await User.findOne({ email });
+
+      if (emailUser && emailUser.firebaseUid !== firebaseUid) {
+        return res.status(409).json({
+          message: "Email already exists with different account",
+        });
+      }
+
+      // Verify Firebase user exists
+      try {
+        await firebaseAuth.getUser(firebaseUid);
+      } catch (firebaseError) {
+        return res.status(400).json({
+          message: "Invalid Firebase user",
+        });
+      }
+
+      // Create new user in MongoDB
+      const defaultName = name || email.split("@")[0] || "User";
+
       user = await User.create({
-        name: name,
+        firebaseUid,
+        name: defaultName,
         email,
-        photo: photo || "",
+        password:password,
+        photo: photo || "https://i.ibb.co/placeholder.jpg",
         role: "citizen",
         isPremium: false,
         isBlocked: false,
       });
+    } else {
+      // Update existing user if needed
+      let updated = false;
+
+      if (name && user.name !== name) {
+        user.name = name;
+        updated = true;
+      }
+
+      if (photo && user.photo !== photo) {
+        user.photo = photo;
+        updated = true;
+      }
+
+      if (updated) {
+        await user.save();
+      }
     }
-    const token = jwt.sign(
-      {
+
+    // Check if blocked
+    if (user.isBlocked) {
+      return res.status(403).json({
+        message: "Your account has been blocked. Please contact support.",
+      });
+    }
+
+    res.json({
+      message: "Success",
+      user: {
         _id: user._id,
+        firebaseUid: user.firebaseUid,
+        name: user.name,
         email: user.email,
+        photo: user.photo,
+        password:user.password,
         role: user.role,
         isPremium: user.isPremium,
         isBlocked: user.isBlocked,
       },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-    res.json({ token });
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
+    console.error("registerOrLogin error:", err);
 
-export const saveUser = async (req, res) => {
-  try {
-    const { name, email, photo, role } = req.body;
-    const exists = await User.findOne({ email });
-    if (!exists) {
-      await User.create({
-        name,
-        email,
-        photo,
-        role: role || "citizen",
-        isPremium: false,
-        isBlocked: false,
+    if (err.code === 11000) {
+      return res.status(409).json({
+        message: "Email already exists",
       });
     }
-    res.json({ message: "User saved" });
-  } catch (err) {
+
     res.status(500).json({ message: err.message });
   }
 };
 
+//Get user by email (protected)
 export const getUserByEmail = async (req, res) => {
   try {
     const email = req.params.email;
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
     res.json(user);
   } catch (err) {
+    console.error("getUserByEmail error:", err);
     res.status(500).json({ message: err.message });
   }
 };
 
-// export const loginUser = async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
+//Login with password
+export const loginWithPassword = async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-//     // Validation
-//     if (!email || !password) {
-//       return res.status(400).json({ 
-//         message: "Email and password are required" 
-//       });
-//     }
+    if (!email || !password) {
+      return res.status(400).json({
+        message: "Email and password are required",
+      });
+    }
 
-//     // Find user
-//     const user = await User.findOne({ email });
-//     if (!user) {
-//       return res.status(401).json({ message: "Invalid email or password" });
-//     }
+    // Find user in MongoDB
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
 
-//     // Check if user is blocked
-//     if (user.isBlocked) {
-//       return res.status(403).json({ 
-//         message: "Your account has been blocked. Please contact support." 
-//       });
-//     }
+    // Check if blocked
+    if (user.isBlocked) {
+      return res.status(403).json({
+        message: "Your account has been blocked. Please contact support.",
+      });
+    }
 
-//     // Check password (plain text comparison)
-//     if (user.password !== password) {
-//       return res.status(401).json({ message: "Invalid email or password" });
-//     }
+    // Check password
+    if (user.password !== password) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
 
-//     // Generate JWT token
-//     const token = jwt.sign(
-//       {
-//         _id: user._id,
-//         email: user.email,
-//         role: user.role,
-//         isPremium: user.isPremium,
-//         isBlocked: user.isBlocked,
-//       },
-//       process.env.JWT_SECRET,
-//       { expiresIn: "7d" }
-//     );
+    // Ensure Firebase user exists
+    if (!user.firebaseUid) {
+      try {
+        // Try to get existing Firebase user
+        const firebaseUser = await firebaseAuth.getUserByEmail(email);
+        user.firebaseUid = firebaseUser.uid;
+        await user.save();
+      } catch (error) {
+        // Create Firebase user if doesn't exist
+        const newFirebaseUser = await firebaseAuth.createUser({
+          email: user.email,
+          password: user.password,
+          displayName: user.name,
+          photoURL: user.photo,
+        });
 
-//     res.json({
-//       message: "Login successful",
-//       token,
-//       user: {
-//         _id: user._id,
-//         name: user.name,
-//         email: user.email,
-//         photo: user.photo,
-//         role: user.role,
-//         isPremium: user.isPremium,
-//         isBlocked: user.isBlocked,
-//       },
-//     });
-//   } catch (err) {
-//     console.error("loginUser error:", err);
-//     res.status(500).json({ message: err.message });
-//   }
-// };
+        user.firebaseUid = newFirebaseUser.uid;
+        await user.save();
+      }
+    }
+
+    // Create custom Firebase token
+    const customToken = await firebaseAuth.createCustomToken(user.firebaseUid);
+
+    res.json({
+      message: "Login successful",
+      customToken,
+      user: {
+        _id: user._id,
+        firebaseUid: user.firebaseUid,
+        name: user.name,
+        email: user.email,
+        photo: user.photo,
+        role: user.role,
+        isPremium: user.isPremium,
+        isBlocked: user.isBlocked,
+      },
+    });
+  } catch (err) {
+    console.error("loginWithPassword error:", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+//Verify Firebase token
+export const verifyToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ message: "Token is required" });
+    }
+
+    const decodedToken = await firebaseAuth.verifyIdToken(token);
+
+    res.json({
+      message: "Token is valid",
+      uid: decodedToken.uid,
+      email: decodedToken.email,
+    });
+  } catch (error) {
+    console.error("verifyToken error:", error);
+    res.status(401).json({
+      message: "Invalid token",
+      error: error.message,
+    });
+  }
+};

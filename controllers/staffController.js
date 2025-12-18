@@ -1,9 +1,7 @@
 import Issue from "../models/Issue.js";
 import Timeline from "../models/Timeline.js";
 
-// ============================================
 // STAFF DASHBOARD STATS
-// ============================================
 export const getStaffStats = async (req, res) => {
   try {
     const staffId = req.user._id;
@@ -53,9 +51,7 @@ export const getStaffStats = async (req, res) => {
   }
 };
 
-// ============================================
 // GET ASSIGNED ISSUES
-// ============================================
 export const getAssignedIssues = async (req, res) => {
   try {
     const staffId = req.user._id;
@@ -102,9 +98,7 @@ export const getAssignedIssues = async (req, res) => {
   }
 };
 
-// ============================================
 // CHANGE ISSUE STATUS
-// ============================================
 export const changeIssueStatus = async (req, res) => {
   try {
     const { id } = req.params;

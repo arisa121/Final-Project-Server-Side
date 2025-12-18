@@ -3,9 +3,7 @@ import User from "../models/User.js";
 import Issue from "../models/Issue.js";
 import Timeline from "../models/Timeline.js";
 
-// ============================================
 // SUBSCRIBE TO PREMIUM
-// ============================================
 export const subscribePremium = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -18,7 +16,6 @@ export const subscribePremium = async (req, res) => {
     }
 
     // Mock Payment Gateway Integration
-    // In real app, integrate SSL Commerz, Stripe, etc.
     const txnId = `TXN${Date.now()}${Math.random().toString(36).substr(2, 9)}`;
 
     // Create payment record
@@ -49,9 +46,8 @@ export const subscribePremium = async (req, res) => {
   }
 };
 
-// ============================================
+
 // BOOST ISSUE PRIORITY
-// ============================================
 export const boostIssuePriority = async (req, res) => {
   try {
     const { issueId } = req.params;
@@ -115,9 +111,7 @@ export const boostIssuePriority = async (req, res) => {
   }
 };
 
-// ============================================
 // GET USER PAYMENTS
-// ============================================
 export const getUserPayments = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -146,9 +140,8 @@ export const getUserPayments = async (req, res) => {
   }
 };
 
-// ============================================
+
 // GENERATE INVOICE DATA (For PDF)
-// ============================================
 export const getInvoice = async (req, res) => {
   try {
     const { paymentId } = req.params;

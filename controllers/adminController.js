@@ -2,11 +2,9 @@ import Issue from "../models/Issue.js";
 import User from "../models/User.js";
 import Timeline from "../models/Timeline.js";
 import Payment from "../models/Payment.js";
+import { firebaseAuth } from "../config/firebaseAdmin.js";
 
-
-// ============================================
 // DASHBOARD STATS
-// ============================================
 export const getAdminStats = async (req, res) => {
   try {
     const totalIssues = await Issue.countDocuments();
@@ -21,20 +19,17 @@ export const getAdminStats = async (req, res) => {
 
     const totalRevenue = totalPayments.length > 0 ? totalPayments[0].total : 0;
 
-    // Latest Issues (last 5)
     const latestIssues = await Issue.find()
       .populate("reporter", "name email")
       .sort({ createdAt: -1 })
       .limit(5);
 
-    // Latest Payments (last 5)
     const latestPayments = await Payment.find()
       .populate("user", "name email")
       .populate("issue", "title")
       .sort({ createdAt: -1 })
       .limit(5);
 
-    // Latest Users (last 5)
     const latestUsers = await User.find({ role: "citizen" })
       .sort({ createdAt: -1 })
       .limit(5);
@@ -58,9 +53,8 @@ export const getAdminStats = async (req, res) => {
   }
 };
 
-// ============================================
+
 // ALL ISSUES (with filters, pagination, sorting)
-// ============================================
 export const getAllIssuesAdmin = async (req, res) => {
   try {
     const {
@@ -85,7 +79,6 @@ export const getAllIssuesAdmin = async (req, res) => {
 
     const skip = (Number(page) - 1) * Number(limit);
 
-    // Sort: High priority first, then by createdAt
     const issues = await Issue.find(query)
       .populate("reporter", "name email")
       .populate("assignedStaff", "name email")
@@ -108,9 +101,7 @@ export const getAllIssuesAdmin = async (req, res) => {
   }
 };
 
-// ============================================
 // ASSIGN STAFF
-// ============================================
 export const assignStaff = async (req, res) => {
   try {
     const { staffId } = req.body;
@@ -120,21 +111,22 @@ export const assignStaff = async (req, res) => {
       return res.status(404).json({ message: "Issue not found" });
     }
 
-    // Check if already assigned
     if (issue.assignedStaff) {
       return res.status(400).json({ message: "Staff already assigned to this issue" });
     }
 
-    // Verify staff exists and has staff role
     const staff = await User.findById(staffId);
     if (!staff || staff.role !== "staff") {
       return res.status(400).json({ message: "Invalid staff member" });
     }
 
+    if (staff.isBlocked) {
+      return res.status(400).json({ message: "This staff member is blocked" });
+    }
+
     issue.assignedStaff = staffId;
     await issue.save();
 
-    // Add timeline entry
     await Timeline.create({
       issue: issue._id,
       status: issue.status,
@@ -154,9 +146,8 @@ export const assignStaff = async (req, res) => {
   }
 };
 
-// ============================================
+
 // REJECT ISSUE
-// ============================================
 export const rejectIssue = async (req, res) => {
   try {
     const issue = await Issue.findById(req.params.id);
@@ -165,7 +156,6 @@ export const rejectIssue = async (req, res) => {
       return res.status(404).json({ message: "Issue not found" });
     }
 
-    // Only pending issues can be rejected
     if (issue.status !== "pending") {
       return res.status(400).json({ message: "Only pending issues can be rejected" });
     }
@@ -173,7 +163,6 @@ export const rejectIssue = async (req, res) => {
     issue.status = "rejected";
     await issue.save();
 
-    // Add timeline entry
     await Timeline.create({
       issue: issue._id,
       status: "rejected",
@@ -189,89 +178,160 @@ export const rejectIssue = async (req, res) => {
   }
 };
 
-// ============================================
-// GET ALL STAFF
-// ============================================
-export const getAllStaff = async (req, res) => {
-  try {
-    const staff = await User.find({ role: "staff" }).sort({ createdAt: -1 });
-    res.json(staff);
-  } catch (err) {
-    console.error("getAllStaff error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
 
-// ============================================
-// CREATE STAFF ( Database)
-// ============================================
+// CREATE STAFF (Auto creates in Firebase)
 export const createStaff = async (req, res) => {
   try {
     const { name, email, phone, photo, password } = req.body;
-     // Validation
-    if (!name || !email) {
-      return res.status(400).json({ message: "Name and email are required" });
+
+    
+    if (!name || !email || !password) {
+      return res.status(400).json({ 
+        message: "Name, email and password are required" 
+      });
     }
-    // Check if user already exists
+
+    // Check if user already exists in MongoDB
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: "Email already exists" });
     }
 
-   
-    // Create in Database only
-    // Staff will register via frontend with same email
-  
-    // Create in Database
+    //Create user in Firebase Authentication
+    let firebaseUser;
+    try {
+      firebaseUser = await firebaseAuth.createUser({
+        email,
+        password,
+        displayName: name,
+        photoURL: photo || "https://i.ibb.co/placeholder.jpg",
+      });
+      console.log("Firebase user created:", firebaseUser.uid);
+    } catch (firebaseError) {
+      console.error("Firebase createUser error:", firebaseError);
+
+      if (firebaseError.code === "auth/email-already-exists") {
+        return res.status(400).json({ 
+          message: "Email already exists in Firebase Authentication" 
+        });
+      }
+      return res.status(500).json({ 
+        message: "Failed to create Firebase user: " + firebaseError.message 
+      });
+    }
+
+    // Create user in MongoDB with role="staff"
     const staff = await User.create({
       name,
       email,
-      photo,
-      phone,
+      password, // Store for backup (optional)
+      photo: photo || "https://i.ibb.co/placeholder.jpg",
+      phone: phone || "",
       role: "staff",
+      firebaseUid: firebaseUser.uid,
       isPremium: false,
       isBlocked: false,
     });
 
+    console.log("MongoDB staff created:", staff._id);
+
     res.status(201).json({ 
       message: "Staff created successfully", 
-      staff 
+      staff: {
+        _id: staff._id,
+        name: staff.name,
+        email: staff.email,
+        photo: staff.photo,
+        phone: staff.phone,
+        role: staff.role,
+        firebaseUid: staff.firebaseUid,
+      }
     });
   } catch (err) {
     console.error("createStaff error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error: " + err.message });
   }
 };
 
-// ============================================
 // UPDATE STAFF
-// ============================================
 export const updateStaff = async (req, res) => {
   try {
-    const { name, email, phone, photo } = req.body;
+    const { name, email, phone, photo, password } = req.body;
     
     const staff = await User.findById(req.params.id);
     if (!staff || staff.role !== "staff") {
       return res.status(404).json({ message: "Staff not found" });
     }
 
+ 
+    if (email && email !== staff.email) {
+      const existingUser = await User.findOne({
+        email,
+        _id: { $ne: staff._id },
+      });
+      if (existingUser) {
+        return res.status(400).json({ message: "Email already in use" });
+      }
+    }
+
+    // Update in Firebase
+    if (staff.firebaseUid) {
+      try {
+        const updateData = {};
+        if (email && email !== staff.email) {
+          updateData.email = email;
+        }
+        if (password) {
+          updateData.password = password;
+        }
+        if (name) {
+          updateData.displayName = name;
+        }
+        if (photo) {
+          updateData.photoURL = photo;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await firebaseAuth.updateUser(staff.firebaseUid, updateData);
+          console.log("Firebase user updated");
+        }
+      } catch (firebaseError) {
+        console.error("Firebase updateUser error:", firebaseError);
+        return res.status(500).json({
+          message: "Failed to update Firebase user: " + firebaseError.message,
+        });
+      }
+    }
+
+    //Update in MongoDB
     staff.name = name || staff.name;
     staff.email = email || staff.email;
     staff.phone = phone || staff.phone;
     staff.photo = photo || staff.photo;
-
+    if (password) {
+      staff.password = password;
+    }
     await staff.save();
 
-    res.json({ message: "Staff updated successfully", staff });
+    res.json({ 
+      message: "Staff updated successfully", 
+      staff: {
+        _id: staff._id,
+        name: staff.name,
+        email: staff.email,
+        photo: staff.photo,
+        phone: staff.phone,
+        role: staff.role,
+        firebaseUid: staff.firebaseUid,
+      }
+    });
   } catch (err) {
     console.error("updateStaff error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error: " + err.message });
   }
 };
 
-// ============================================
-// DELETE STAFF
-// ============================================
+//DELETE STAFF
 export const deleteStaff = async (req, res) => {
   try {
     const staff = await User.findById(req.params.id);
@@ -279,32 +339,54 @@ export const deleteStaff = async (req, res) => {
       return res.status(404).json({ message: "Staff not found" });
     }
 
-    // Check if staff has assigned issues
+    // Check assigned issues
+    const Issue = mongoose.model("Issue");
     const assignedIssues = await Issue.countDocuments({ assignedStaff: staff._id });
     if (assignedIssues > 0) {
       return res.status(400).json({ 
-        message: "Cannot delete staff with assigned issues. Please reassign issues first." 
+        message: "Cannot delete staff with assigned issues. Please reassign first." 
       });
     }
 
+    // Delete from Firebase
+    if (staff.firebaseUid) {
+      try {
+        await firebaseAuth.deleteUser(staff.firebaseUid);
+        console.log("Firebase user deleted");
+      } catch (firebaseError) {
+        console.error("Firebase deleteUser error:", firebaseError);
+      }
+    }
+
+    //Delete from MongoDB
     await User.findByIdAndDelete(req.params.id);
-
-    // Also delete from Firebase if needed
-    // await firebaseAuth.deleteUser(staff.firebaseUid);
-
+    
     res.json({ message: "Staff deleted successfully" });
   } catch (err) {
     console.error("deleteStaff error:", err);
+    res.status(500).json({ message: "Server error: " + err.message });
+  }
+};
+
+//GET ALL STAFF
+export const getAllStaff = async (req, res) => {
+  try {
+    const staff = await User.find({ role: "staff" })
+      .select("-password")
+      .sort({ createdAt: -1 });
+    res.json(staff);
+  } catch (err) {
+    console.error("getAllStaff error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// ============================================
 // GET ALL USERS (Citizens)
-// ============================================
 export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find({ role: "citizen" }).sort({ createdAt: -1 });
+    const users = await User.find({ role: "citizen" })
+      .select("-password")
+      .sort({ createdAt: -1 });
     res.json(users);
   } catch (err) {
     console.error("getAllUsers error:", err);
@@ -312,9 +394,9 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
-// ============================================
+
 // BLOCK/UNBLOCK USER
-// ============================================
+
 export const blockUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -324,6 +406,13 @@ export const blockUser = async (req, res) => {
 
     user.isBlocked = !user.isBlocked;
     await user.save();
+    if (user.isBlocked && user.firebaseUid) {
+      try {
+        await firebaseAuth.revokeRefreshTokens(user.firebaseUid);
+      } catch (error) {
+        console.error("Error revoking tokens:", error);
+      }
+    }
 
     res.json({ 
       message: `User ${user.isBlocked ? "blocked" : "unblocked"} successfully`, 
@@ -335,9 +424,7 @@ export const blockUser = async (req, res) => {
   }
 };
 
-// ============================================
 // GET ALL PAYMENTS
-// ============================================
 export const getAllPayments = async (req, res) => {
   try {
     const {
@@ -356,6 +443,7 @@ export const getAllPayments = async (req, res) => {
         $lte: new Date(endDate)
       };
     }
+
     const skip = (Number(page) - 1) * Number(limit);
     const payments = await Payment.find(query)
       .populate("user", "name email")
@@ -363,8 +451,10 @@ export const getAllPayments = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
-   const total = await Payment.countDocuments(query);
-   res.json({
+
+    const total = await Payment.countDocuments(query);
+
+    res.json({
       payments,
       total,
       page: Number(page),
@@ -377,9 +467,7 @@ export const getAllPayments = async (req, res) => {
   }
 };
 
-// ============================================
-// GET PAYMENT STATS (For Charts)
-// ============================================
+// GET PAYMENT STATS
 export const getPaymentStats = async (req, res) => {
   try {
     const monthlyStats = await Payment.aggregate([

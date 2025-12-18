@@ -6,15 +6,14 @@ const issueSchema = new mongoose.Schema(
     description: { type: String, required: true },
     category: {
       type: String,
-      enum: ["Road", "Garbage", "Water", "Electricity"],
+      enum: ["Roads", "Garbage", "Water", "Electricity","Streetlights","Traffic","Environment","Safety","Health","Public Services"],
       required: true,
     },
     images: [String],
-    location: {
-      address: String,
-      lat: Number,
-      lng: Number,
-    },
+   location: {
+  type: String,
+  required: true,
+},
     status: {
       type: String,
       enum: ["pending", "in-progress","working", "resolved", "closed","rejected"],
@@ -26,7 +25,7 @@ const issueSchema = new mongoose.Schema(
       default: "normal",
     },
     upvotes: { type: Number, default: 0 },
-    upvotedBy: [{ type: String }], // Store user IDs or emails
+    upvotedBy: [{ type: String }],
     reporter: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
