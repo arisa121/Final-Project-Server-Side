@@ -165,7 +165,7 @@ export const createIssue = async (req, res) => {
       description,
       category,
       images: image ? [image] : [],
-      location: address || "Location not provided",
+      location: location || address || "Location not provided",
       reporter: req.user._id,
       priority: "normal",
       upvotes: 0,
