@@ -157,7 +157,7 @@ export const createIssue = async (req, res) => {
       });
     }
 
-    const { title, description, category, image, address,location} = req.body;
+    const { title, description, category, image, address, location } = req.body;
 
     // Create issue
     const issue = await Issue.create({
