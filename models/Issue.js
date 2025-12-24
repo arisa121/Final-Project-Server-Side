@@ -6,7 +6,7 @@ const issueSchema = new mongoose.Schema(
     description: { type: String, required: true },
     category: {
       type: String,
-      enum: ["Roads", "Garbage", "Water", "Electricity","Streetlights","Traffic","Environment","Safety","Health","Public Services"],
+      enum: ["Roads", "Garbage", "Water", "Electricity","Streetlights","Traffic","Environment","Safety","Health","Public Services","Others"],
       required: true,
     },
     images: [String],
